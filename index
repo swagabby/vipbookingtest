@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SWAG VIP Welfare System</title>
+    <style>
+        :root { 
+            --bg: #050505; 
+            --card-bg: rgba(255, 255, 255, 0.04); 
+            --border: rgba(255, 255, 255, 0.1); 
+            --primary: #00D2BE; /* SWAG 品牌色 */
+            --text-main: #ffffff; 
+            --text-dim: #888888; 
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg); color: var(--text-main); font-family: -apple-system, sans-serif; padding: 30px 15px; display: flex; flex-direction: column; align-items: center; }
+        .container { max-width: 850px; width: 100%; }
+        header { text-align: center; margin-bottom: 30px; }
+        
+        /* 載入動畫 */
+        #loader-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #050505; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; transition: opacity 0.5s ease; }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(0, 210, 190, 0.1); border-top: 4px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .user-pill { display: inline-flex; align-items: center; background: var(--card-bg); border: 1px solid var(--border); padding: 8px 25px; border-radius: 100px; margin-top: 10px; gap: 10px; backdrop-filter: blur(10px); }
+        #u-lv { color: var(--primary); font-weight: 900; font-size: 15px; }
+        
+        .benefit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; width: 100%; }
+        .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 24px; padding: 25px; transition: 0.3s; display: flex; flex-direction: column; justify-content: space-between; min-height: 190px; position: relative; }
+        .card:not(.locked):hover { border-color: var(--primary); transform: translateY(-4px); box-shadow: 0 10px 30px -10px rgba(0, 210, 190, 0.3); cursor: pointer; }
+        
+        .card.locked { cursor: not-allowed; }
+        .card.level-locked { opacity: 0.35; filter: grayscale(1); border-color: #222; }
+        .card.quota-locked { border-color: rgba(255,255,255,0.05); }
+
+        .card-history-wrapper { margin-top: 15px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1); }
+        .history-item-row { font-size: 11px; color: var(--text-dim); margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .history-item-row:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .history-data-line { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+        
+        .date-highlight { color: #ffffff !important; font-weight: 900; font-size: 12px; }
+        .st-badge { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; }
+        .st-red { background: rgba(255, 90, 95, 0.15); color: #ff5a5f; }
+        .st-green { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+
+        #modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 15px; backdrop-filter: blur(10px); }
+        .modal-content { background: #0f0f0f; border: 1px solid var(--border); border-radius: 30px; width: 100%; max-width: 500px; padding: 30px; position: relative; max-height: 90vh; overflow-y: auto; }
+        .form-group { margin-bottom: 18px; }
+        label { font-size: 11px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 5px; text-transform: uppercase; }
+        input, select, textarea { width: 100%; background: #1a1a1a; border: 1px solid var(--border); border-radius: 12px; padding: 12px; color: #fff; outline: none; font-size: 14px; }
+        input:focus, select:focus { border-color: var(--primary); }
+        
+        .submit-btn { width: 100%; padding: 16px; border-radius: 14px; border: none; background: var(--primary); color: #000; font-weight: 900; cursor: pointer; margin-top: 10px; }
+        
+        /* 升級後的核對按鈕 */
+        .check-btn { 
+            background: linear-gradient(135deg, #ff9900, #ff5e00); 
+            color: #fff; 
+            border: none; 
+            padding: 12px; 
+            border-radius: 12px; 
+            font-size: 13px; 
+            font-weight: 900; 
+            cursor: pointer; 
+            margin-top: 10px; 
+            width: 100%; 
+            box-shadow: 0 4px 15px rgba(255, 153, 0, 0.4);
+            transition: 0.3s;
+        }
+        .check-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 153, 0, 0.6);
+        }
+        .check-btn:disabled {
+            background: #555; box-shadow: none; color: #aaa; cursor: not-allowed; transform: none;
+        }
+
+        .hidden { display: none !important; }
+        .anchor-notice { color: var(--primary); font-size: 13px; font-weight: bold; margin-bottom: 15px; text-align: center; border: 1px dashed var(--primary); padding: 8px; border-radius: 10px; background: rgba(0, 210, 190, 0.05); }
+    </style>
+</head>
+<body>
+
+    <div id="loader-overlay"><div class="spinner"></div><div style="color:var(--primary); font-size:12px; font-weight:bold; letter-spacing:2px;">LOADING VIP SYSTEM...</div></div>
+
+    <div class="container">
+        <header>
+            <h1 style="font-size:24px; margin-bottom:15px;">SWAG VIP 預約系統</h1>
+            <div class="user-pill">
+                <span style="width:8px; height:8px; background:#10b981; border-radius:50%;"></span>
+                <span id="u-name" style="font-weight:800;">Syncing Profile...</span>
+                <span id="u-lv">--</span>
+            </div>
+        </header>
+        <div id="benefit-grid" class="benefit-grid"></div>
+    </div>
+
+    <!-- Booking Modal -->
+    <div id="modal">
+        <div class="modal-content">
+            <button onclick="closeModal()" style="position:absolute; top:20px; right:25px; background:none; border:none; color:#444; font-size:28px; cursor:pointer;">&times;</button>
+            <h2 id="m-title" style="margin-bottom:20px; font-size:20px;">福利預約</h2>
+            
+            <div id="anchor-notice" class="anchor-notice hidden">填寫完畢將由官方向主播拿取素材</div>
+
+            <!-- 1. 徽章專屬 -->
+            <div id="badge-fields" class="hidden">
+                <div class="form-group"><label>徽章名稱</label><input type="text" id="b_name"></div>
+                <div class="form-group"><label>元素或文字</label><input type="text" id="b_elem"></div>
+                <div class="form-group"><label>示意圖 (雲端網址)</label><input type="url" id="b_url"></div>
+                <div class="form-group"><label>贈與帳號 (每行一個 ID)</label><textarea id="b_targets" rows="2"></textarea></div>
+            </div>
+
+            <!-- 2. 禮物專屬 -->
+            <div id="gift-fields" class="hidden">
+                <div class="form-group"><label>禮物名稱</label><input type="text" id="g_name"></div>
+                <div style="display:flex; gap:10px; font-size:13px; color:#888; margin-bottom:15px;"><input type="checkbox" id="g_brand" style="width:auto;"> 是否冠名</div>
+                <div class="form-group"><label>禮物圖上文字</label><input type="text" id="g_txt"></div>
+                <div class="form-group"><label>禮物鑽石數</label><input type="number" id="g_dia"></div>
+                <div style="display:flex; gap:10px; font-size:13px; color:#888; margin-bottom:15px;"><input type="checkbox" id="g_photo" style="width:auto;"> 需要主播照片作為素材</div>
+            </div>
+
+            <!-- 3. 廣告專屬 -->
+            <div id="ad-fields" class="hidden">
+                <div style="display:flex; gap:10px; font-size:13px; color:#888; margin-bottom:15px;"><input type="checkbox" id="ad_brand" style="width:auto;"> 是否冠名</div>
+                <div class="form-group"><label>客製化文案 (限 8 字內)</label><input type="text" id="ad_copy" maxlength="8"></div>
+            </div>
+
+            <!-- 4. 午餐專屬 -->
+            <div id="lunch-fields" class="hidden">
+                <p style="font-size:12px; color:var(--primary); margin-bottom:10px;">* 請選擇下週開始的三個優先日期</p>
+                <div class="form-group"><label>優先日期 1</label><select id="l_1"></select></div>
+                <div class="form-group"><label>優先日期 2</label><select id="l_2"></select></div>
+                <div class="form-group"><label>優先日期 3</label><select id="l_3"></select></div>
+            </div>
+
+            <!-- 5. Swagger ID (常駐) -->
+            <div class="form-group" id="sw-group">
+                <label id="label-swagger">指定 Swagger ID</label>
+                <input type="text" id="swagger_id" placeholder="請輸入 ID">
+                <button id="btn-check" class="check-btn" onclick="syncAndCheck()">🔍 核對名額狀況</button>
+            </div>
+            
+            <!-- 6. 日期/場次 -->
+            <div class="form-group" id="date-group">
+                <label>選擇日期 / 場次</label>
+                <select id="reserve_date" disabled><option>請先完成核對</option></select>
+            </div>
+
+            <!-- 7. 小鈴噹專屬 -->
+            <div id="bell-fields" class="hidden">
+                <div class="form-group"><label>發送文字 (限 20 字)</label><input type="text" id="bell_msg" maxlength="20"></div>
+                <div style="display:flex; gap:10px; font-size:14px; color:#888; margin-bottom:15px;"><input type="checkbox" id="bell_brand" style="width:auto;"> 是否冠名</div>
+            </div>
+
+            <!-- 8. 封面專屬 -->
+            <div id="cover-fields" class="hidden">
+                <div class="form-group"><label>客製化文案 (限 20 字)</label><input type="text" id="cover_copy" maxlength="20"></div>
+                <div style="display:flex; gap:10px; font-size:13px; color:#888; margin-bottom:15px;"><input type="checkbox" id="cover_brand" style="width:auto;"> 是否冠名</div>
+            </div>
+            
+            <div class="form-group"><label>需求備註</label><textarea id="reserve_content" rows="2"></textarea></div>
+            <button id="btn-submit" class="submit-btn" onclick="handleFormSubmit()">確認提交申請</button>
+        </div>
+    </div>
+
+    <script>
+        const USER_API = 'https://swag-user-info-api-905468082258.asia-east1.run.app/api/badges';
+        // 👉 請將下方替換為您 GAS 部署的新網址
+        const GAS_API = 'https://script.google.com/macros/s/AKfycbzGOjbRowzpQRyP5l7NohKllWF7idzurAJGFE7HiHUG9m5LJFQrMne129L-QbeQ2Uur8g/exec';
+
+        let user = { id: '', username: '', level: 0 }, userHistory =[], bookings = [], activeWelfare = null;
+
+        const WELFARES =[
+            { name: '大神贊助', lv: 50 }, { name: '女神聚會', lv: 50 },
+            { name: '訂製小鈴噹通知', lv: 60 }, { name: '蓋板創作者封面', lv: 70 },
+            { name: '訂製搜尋框文字', lv: 70 }, { name: '訂製專屬徽章', lv: 80 },
+            { name: '訂製專屬禮物', lv: 80 }, { name: '專屬直播欄位廣告', lv: 90 },
+            { name: 'CEO午餐', lv: 90 }
+        ];
+
+        window.onload = function() { init(); };
+
+        async function init() {
+            const params = new URLSearchParams(window.location.search);
+            user.id = params.get('user_id'); if(!user.id) return;
+            try {
+                const res = await fetch(USER_API + "?user_id=" + user.id);
+                const data = await res.json();
+                user.username = (data?.username || data?.display_name || user.id).trim();
+                user.level = data?.level || 0;
+                document.getElementById('u-name').innerText = user.username;
+                document.getElementById('u-lv').innerText = "LV." + user.level;
+                
+                const hRes = await fetch(GAS_API + "?action=getUserHistory&username=" + encodeURIComponent(user.username) + "&v=" + Date.now());
+                const hText = await hRes.text();
+                userHistory = JSON.parse(hText);
+                
+                renderCards();
+                const loader = document.getElementById('loader-overlay');
+                loader.style.opacity = '0';
+                setTimeout(() => { loader.style.display = 'none'; }, 500);
+            } catch(e) { renderCards(); }
+        }
+
+        function renderCards() {
+            const grid = document.getElementById('benefit-grid');
+            const now = new Date();
+            const currentMonthStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, '0');
+            const todayStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, '0') + "-" + String(now.getDate()).padStart(2, '0');
+            const todayTime = now.getTime();
+
+            grid.innerHTML = WELFARES.map(function(w) {
+                const myRecords = userHistory.filter(h => h.benefit === w.name);
+                const monthCount = myRecords.filter(h => h.submitMonth === currentMonthStr).length;
+                
+                let isQuotaLocked = (w.name === '大神贊助' && user.level >= 90) ? (monthCount >= 2) : (monthCount >= 1);
+                const isLevelLocked = user.level < w.lv;
+                const locked = isLevelLocked || isQuotaLocked;
+
+                let cardClass = "card ";
+                if (isLevelLocked) cardClass += "locked level-locked";
+                else if (isQuotaLocked) cardClass += "locked quota-locked";
+
+                let btnTxt = isLevelLocked ? "🔒 等級不足" : (isQuotaLocked ? "🔒 本月已預約" : "立即預約 →");
+                let btnColor = (isLevelLocked || isQuotaLocked) ? "#777777" : "var(--primary)";
+
+                // 過濾顯示紀錄邏輯
+                const activeRecords = myRecords.filter(h => {
+                    const isDatePattern = /^\d{4}-\d{2}/.test(h.date);
+                    if (!isDatePattern) return true; // 保留中文與文字
+                    const isPast = h.date < todayStr;
+                    if (!isPast) return true; // 保留未來日期
+                    // 過去日期為「已完成」，滿7天後自動隱藏
+                    return (todayTime - new Date(h.date).getTime()) / (1000 * 3600 * 24) <= 7;
+                });
+
+                let historyHtml = '';
+                if (activeRecords.length > 0) {
+                    historyHtml = '<div class="card-history-wrapper">' + activeRecords.map(h => {
+                        const isDatePattern = /^\d{4}-\d{2}/.test(h.date);
+                        let displayStatus = "已收到";
+                        // 只有標準日期格式，且小於今天，才顯示已完成
+                        if (isDatePattern && h.date < todayStr) displayStatus = "已完成";
+
+                        let displayDate = h.date || "尚未安排";
+                        const badgeClass = (displayStatus === "已完成") ? 'st-badge st-green' : 'st-badge st-red';
+                        
+                        return '<div class="history-item-row">' +
+                               '<div>預約月份: <span class="date-highlight">' + h.submitMonth + '</span></div>' +
+                               '<div class="history-data-line">' +
+                               '<span>福利日期: <span class="date-highlight">' + displayDate + '</span></span>' +
+                               '<span class="' + badgeClass + '">' + displayStatus + '</span></div></div>';
+                    }).join('') + '</div>';
+                }
+
+                return `<div class="${cardClass}" onclick="${locked ? '' : `openBooking('${w.name}')`}">
+                    <div><h3 style="font-size:18px; margin-bottom:5px;">${w.name}</h3><p style="font-size:14px; color:var(--primary); font-weight:900;">LV.${w.lv}+</p></div>
+                    <div style="margin-top: 10px;">
+                        <div style="color:${btnColor}; font-size:12px; font-weight:900;">${btnTxt}</div>
+                        ${historyHtml}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function openBooking(name) {
+            activeWelfare = name;
+            document.getElementById('m-title').innerText = name;
+            document.getElementById('modal').style.display = 'flex';
+            
+            document.getElementById('swagger_id').value = "";
+            document.getElementById('reserve_content').value = "";
+            document.getElementById('btn-check').innerText = "🔍 核對名額狀況";
+            document.getElementById('btn-check').disabled = false;
+            document.getElementById('reserve_date').innerHTML = '<option>請先完成核對</option>';
+            document.getElementById('reserve_date').disabled = true;
+            
+            const needsNotice =['蓋板創作者封面', '訂製專屬徽章', '訂製專屬禮物', '專屬直播欄位廣告'].includes(name);
+            document.getElementById('anchor-notice').classList.toggle('hidden', !needsNotice);
+
+            const ids =['sw-group', 'date-group', 'btn-check', 'bell-fields', 'badge-fields', 'gift-fields', 'cover-fields', 'ad-fields', 'lunch-fields'];
+            ids.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+            if (name === '訂製專屬徽章') {
+                document.getElementById('badge-fields').classList.remove('hidden');
+            } else if (name === '訂製專屬禮物') {
+                document.getElementById('gift-fields').classList.remove('hidden');
+                document.getElementById('sw-group').classList.remove('hidden');
+            } else if (name === 'CEO午餐') {
+                document.getElementById('lunch-fields').classList.remove('hidden');
+                renderLunchSelects();
+            } else if (name === '專屬直播欄位廣告') {
+                document.getElementById('sw-group').classList.remove('hidden');
+                document.getElementById('ad-fields').classList.remove('hidden');
+            } else {
+                document.getElementById('sw-group').classList.remove('hidden');
+                document.getElementById('date-group').classList.remove('hidden');
+                document.getElementById('btn-check').classList.remove('hidden');
+                if (name === '訂製小鈴噹通知') document.getElementById('bell-fields').classList.remove('hidden');
+                if (name === '蓋板創作者封面') document.getElementById('cover-fields').classList.remove('hidden');
+            }
+        }
+
+        function renderLunchSelects() {
+            const nextWeek = new Date(); nextWeek.setDate(nextWeek.getDate() + (7 - (nextWeek.getDay() || 7) + 1));['l_1', 'l_2', 'l_3'].forEach(id => {
+                const el = document.getElementById(id); el.innerHTML = '';
+                for (let i = 0; i < 30; i++) {
+                    const d = new Date(nextWeek); d.setDate(nextWeek.getDate() + i);
+                    const ds = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+                    el.add(new Option(ds, ds));
+                }
+            });
+        }
+
+        async function syncAndCheck() {
+            const sid = document.getElementById('swagger_id').value.trim();
+            if (!sid) return alert("請輸入 Swagger ID");
+            const btn = document.getElementById('btn-check');
+            btn.innerText = "⏳ 同步中..."; btn.disabled = true;
+            try {
+                const actionMap = { '大神贊助': 'getGrandSponsorData', '女神聚會': 'getPartyData', '訂製小鈴噹通知': 'getBellData', '蓋板創作者封面': 'getCoverData', '訂製搜尋框文字': 'getSearchBoxData' };
+                const res = await fetch(GAS_API + "?action=" + actionMap[activeWelfare] + "&v=" + Date.now());
+                const text = await res.text();
+                bookings = JSON.parse(text);
+                const select = document.getElementById('reserve_date');
+                select.disabled = false; select.innerHTML = '<option value="">請選擇日期</option>';
+                const today = new Date();
+                if (activeWelfare === '女神聚會') {
+                    let m = ((today.getMonth()+1)%2===0)?today.getMonth()+1:today.getMonth()+2;
+                    let y = today.getFullYear(); if(m>12){m=2;y+=1;}
+                    const ds = y + "-" + String(m).padStart(2,'0');
+                    const occupied = bookings.some(b => b.swagger_id === sid && b.date === ds);
+                    select.add(new Option(y + "年 " + m + "月場次" + (occupied?" (此ID已被預約)":""), ds));
+                    select.options[select.options.length-1].disabled = occupied;
+                } else {
+                    const limit = new Date(today.getFullYear(), today.getMonth() + 1, 5);
+                    const startDay = (activeWelfare === '蓋板創作者封面') ? 14 : 1;
+                    for (let i = startDay; i <= 60; i++) {
+                        const d = new Date(today); d.setDate(today.getDate() + i);
+                        if (d > limit && activeWelfare !== '訂製搜尋框文字') break;
+                        const ds = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+                        const occupied = bookings.some(b => b.swagger_id === sid && b.date === ds);
+                        const dayFull = bookings.filter(b => b.date === ds).length >= (activeWelfare==='大神贊助'?3:1);
+                        let st = ""; let dis = false;
+                        if (occupied) { st = " (此ID已被預約)"; dis = true; }
+                        else if (dayFull && activeWelfare === '大神贊助') {
+                            if (user.level >= 90) st = " (預約額滿，Lv.90 特別權限)";
+                            else { st = " (預約額滿)"; dis = true; }
+                        } 
+                        else if (dayFull && activeWelfare !== '訂製搜尋框文字') { st = " (預約額滿)"; dis = true; }
+                        select.add(new Option(ds + st, ds)); select.options[select.options.length-1].disabled = dis;
+                    }
+                }
+                btn.innerText = "✅ 核對完成";
+            } catch (e) { alert("連線失敗"); btn.disabled = false; btn.innerText="🔍 重新核對"; }
+        }
+
+        function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+        async function handleFormSubmit() {
+            if (!confirm("一經送出不得更改，請再三確認內容。")) return;
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true; btn.innerText = "Submitting...";
+            const payload = {
+                user_id: user.id, username: user.username, level: user.level, benefit: activeWelfare,
+                swagger_id: document.getElementById('swagger_id').value,
+                date: document.getElementById('reserve_date') ? document.getElementById('reserve_date').value : "",
+                content: document.getElementById('reserve_content').value,
+                badge_name: document.getElementById('b_name').value, badge_elements: document.getElementById('b_elem').value,
+                img_url: document.getElementById('b_url').value, target_ids: document.getElementById('b_targets').value,
+                gift_name: document.getElementById('g_name').value, diamonds: document.getElementById('g_dia').value, gift_text: document.getElementById('g_txt').value,
+                is_branded: (document.getElementById('g_brand').checked || document.getElementById('ad_brand').checked || document.getElementById('bell_brand').checked || document.getElementById('cover_brand').checked) ? "是" : "否",
+                need_photo: document.getElementById('g_photo').checked ? "是" : "否",
+                ad_copy: document.getElementById('ad_copy').value,
+                lunch_1: document.getElementById('l_1') ? document.getElementById('l_1').value : "",
+                lunch_2: document.getElementById('l_2') ? document.getElementById('l_2').value : "",
+                lunch_3: document.getElementById('l_3') ? document.getElementById('l_3').value : "",
+                message: document.getElementById('bell_msg').value, copy_text: document.getElementById('cover_copy').value
+            };
+            try {
+                await fetch(GAS_API, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                alert("提交成功！"); location.reload();
+            } catch (e) { alert("連線失敗"); btn.disabled = false; }
+        }
+    </script>
+</body>
+</html>
